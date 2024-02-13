@@ -25,11 +25,11 @@ admin.site.index_title = "Welcome to Panda Streaming Platform Admin"
 
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('', include('video_api.urls')),
-    path('', include('video_app.urls')),
-    path('', include('video_search.urls')),
-    path('management/', include('catalog_management_app.urls')),
+    path('catalogservice/admin/', admin.site.urls),
+    path('catalogservice/', include('video_api.urls')),
+    path('catalogservice/', include('video_app.urls')),
+    path('catalogservice/', include('video_search.urls')),
+    path('catalogservice/management/', include('catalog_management_app.urls')),
 ]
 
 if settings.DEBUG:

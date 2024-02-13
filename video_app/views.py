@@ -1,6 +1,6 @@
 from django.contrib.contenttypes.models import ContentType
-from video_app.utils import MobileOnlyMixin, decode_token, standardResponse, user_has_active_plan
-from .models import Catagory, Comment, Content, FavoriteContent, Genre, Director, Movie, Season, Series, Episode, Banner, SubscriptionPlan, UserSubscription, ContentType
+from video_app.utils import decode_token, standardResponse, user_has_active_plan
+from .models import Catagory, Comment, Content, FavoriteContent, Genre, Director, Movie, Season, Series, Episode, Banner, SubscriptionPlan, UserSubscription, ContentType, VideoConversionType, PandaDocs
 from .serializers import (
     CategorySerializer,
     CommentSerializer,
@@ -19,18 +19,27 @@ from .serializers import (
     EpisodeSerializer,
     BannerSerializer,
     SubscriptionPlanSerializer,
-    UserSubscriptionSerializer
+    UserSubscriptionSerializer,
+    VideoConversionTypeSerializer,
+    ContentTypeBannerSerializer,
+    PandaDocsSerializer
 )
-from .base_view import BaseViewSet
+from .base_view import BaseViewSet, MobileOnlyMixin, MobileOnlyEpisodes
 from video_app.utils import paginate_queryset
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-
+from django.db.models import Subquery, OuterRef
 from rest_framework import generics
+from rest_framework.views import APIView
+from django.contrib.contenttypes.models import ContentType
 
+
+class VideoConversionTypeListView(BaseViewSet):
+    queryset = VideoConversionType.objects.all()
+    serializer_class = VideoConversionTypeSerializer
 
 class GenreViewSet(BaseViewSet):
     queryset = Genre.objects.all()
@@ -40,6 +49,55 @@ class GenreViewSet(BaseViewSet):
 class DirectorViewSet(BaseViewSet):
     queryset = Director.objects.all()
     serializer_class = DirectorSerializer
+
+class MovieFeaturedViewSet(MobileOnlyMixin, BaseViewSet):
+    queryset = Movie.objects.all()
+    serializer_class = MovieSerializer
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return MovieSerializer
+        elif self.action == 'retrieve':
+            return MovieDetailSerializer
+        return MovieSerializer
+
+    def list(self, request, *args, **kwargs):
+        try:
+
+            # Fetch movies and series related to this category
+            movies = Movie.objects.filter(is_featured=True).order_by('id')
+            series = Series.objects.filter(is_featured=True).order_by('id')
+            # Combine movies and series into a single queryset
+            combined_content = list(movies) + list(series)
+
+            # Paginate the combined list using your custom function
+            paginated_queryset, pagination_data = paginate_queryset(
+                combined_content, request)
+            if not paginated_queryset:
+                return standardResponse(status="success", message="Content not found.", data=[])
+
+            # Serialize page items
+            content_list = []
+            for item in paginated_queryset:
+                if isinstance(item, Movie):
+                    serialized_item = HomeMovieSerializer(
+                        item, context={'request': request}).data
+                    serialized_item['is_movie'] = True
+                else:
+                    serialized_item = SeriesListSerializer(
+                        item, context={'request': request}).data
+                    serialized_item['is_movie'] = False
+
+                serialized_item['telegram_link'] = item.telegram_link
+                serialized_item['slug'] = item.slug
+                serialized_item['telegram_private_channel'] = item.telegram_private_channel
+                content_list.append(serialized_item)
+
+            # Return standard response with custom pagination
+            return standardResponse(status="success", message="Contents retrieved", data={"content": content_list, "pagination": pagination_data})
+
+        except Exception as e:
+            return standardResponse(status="error", message=str(e), data={})
 
 
 class MovieViewSet(MobileOnlyMixin, BaseViewSet):
@@ -82,7 +140,9 @@ class SeriesViewSet(MobileOnlyMixin, BaseViewSet):
 
     def get_queryset(self):
         queryset = Series.objects.filter(is_ready=True).order_by('id')
-        genre_from_param = self.request.query_params.get('genre', None)
+        
+        # Use DRF's query_params if available, otherwise fallback to Django's GET
+        genre_from_param = self.request.query_params.get('genre', None) if hasattr(self.request, 'query_params') else self.request.GET.get('genre', None)
 
         if not self.is_request_from_mobile(self.request):
             queryset = queryset.filter(is_mobile_only=False)
@@ -111,14 +171,9 @@ class SeriesViewSet(MobileOnlyMixin, BaseViewSet):
         return standardResponse(status="success", message="Series retrieved", data=serializer.data, pagination=pagination_data)
 
 
-class EpisodeViewSet(MobileOnlyMixin, BaseViewSet):
+class EpisodeViewSet(MobileOnlyEpisodes, BaseViewSet):
     queryset = Episode.objects.all().order_by('series', 'season', 'episode_number')
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        if not self.is_request_from_mobile(self.request):
-            queryset = queryset.filter(series__is_mobile_only=False)
-        return queryset
+    
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -126,6 +181,7 @@ class EpisodeViewSet(MobileOnlyMixin, BaseViewSet):
         elif self.action == 'retrieve':
             return EpisodeSerializerDetails
         return EpisodeSerializer
+
 
     def list(self, request, *args, **kwargs):
         series_id = kwargs.get('series_pk')
@@ -184,9 +240,8 @@ class CategoryViewSet(BaseViewSet):
             category = Catagory.objects.get(id=pk)
 
             # Fetch movies and series related to this category
-            movies = Movie.objects.filter(category=category).order_by('id')
-            series = Series.objects.filter(category=category).order_by('id')
-
+            movies = Movie.objects.filter(category=category, is_ready=True).order_by('id')
+            series = Series.objects.filter(category=category, is_ready=True).order_by('id')
             # Combine movies and series into a single queryset
             combined_content = list(movies) + list(series)
 
@@ -239,6 +294,7 @@ class UserSubscriptionViewSet(BaseViewSet):
 class FavoriteContentViewSet(BaseViewSet):
     queryset = FavoriteContent.objects.all()
     serializer_class = FavoriteContentSerializer
+    
 
     def list(self, request, *args, **kwargs):
         # Validate the token
@@ -338,3 +394,13 @@ class CommentListCreateView(generics.ListCreateAPIView):
                 pass  # Handle the exception as needed
 
         return Comment.objects.none()
+
+
+class ContentTypeListView(BaseViewSet):
+    queryset = ContentType.objects.all()
+    serializer_class = ContentTypeBannerSerializer
+
+
+class PandaDocsView(BaseViewSet):
+    queryset = PandaDocs.objects.all()
+    serializer_class = PandaDocsSerializer

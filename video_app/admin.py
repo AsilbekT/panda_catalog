@@ -11,7 +11,8 @@ from .models import (
     Banner,
     Catagory,
     VideoConversionType,
-    SubscriptionPlan
+    SubscriptionPlan,
+    PandaDocs
 )
 
 
@@ -125,3 +126,4 @@ admin.site.register(SubscriptionPlan, SubscriptionPlanAdmin)
 admin.site.register(Catagory)
 admin.site.register(VideoConversionType)
 admin.site.register(UserSubscription)
+admin.site.register(PandaDocs)

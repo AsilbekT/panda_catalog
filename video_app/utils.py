@@ -6,13 +6,14 @@ from PIL import Image
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 import jwt
 from jwt.exceptions import InvalidTokenError
+from catalog_service.settings import SERVICES
 
 # from .models import SubscriptionPlan
 SECRET_KEY = 'VpwI_yUDuQuhA1VEB0c0f9qki8JtLeFWh3lA5kKvyGnHxKrZ-M59cA'
 ALGORITHM = "HS256"
 
 
-BILLING_SERVICE_URL = "http://127.0.0.1:8001/"
+BILLING_SERVICE_URL = "https://gateway.pandatv.uz/billingservice/"
 
 
 def standardResponse(status, message, data, pagination=None):
@@ -27,21 +28,27 @@ def standardResponse(status, message, data, pagination=None):
 
 
 def paginate_queryset(queryset, request):
-    page_number = int(request.query_params.get('page', 1))
-    page_size = int(request.query_params.get('size', 10))
+    page_number = request.query_params.get('page', 1)
+    page_size = request.query_params.get('size', 10)
 
     paginator = Paginator(queryset, page_size)
+
     try:
         paginated_queryset = paginator.page(page_number)
-    except EmptyPage:
-        return [], standardResponse(status="error", message="Invalid page number.", data={})
     except PageNotAnInteger:
-        return [], standardResponse(status="error", message="Page number is not an integer.", data={})
+        # If page is not an integer, deliver first page.
+        paginated_queryset = paginator.page(1)
+        page_number = 1
+    except EmptyPage:
+        # If page is out of range, deliver last page of results.
+        paginated_queryset = paginator.page(paginator.num_pages)
+        page_number = paginator.num_pages
 
+    # Create pagination response
     pagination_data = {
         'total': paginator.count,
         'page_size': page_size,
-        'current_page': page_number,
+        'current_page': int(page_number),
         'total_pages': paginator.num_pages,
         'next': paginated_queryset.has_next(),
         'previous': paginated_queryset.has_previous(),
@@ -72,8 +79,8 @@ def user_has_active_plan(username, token):
     headers = {
         'Authorization': f'Bearer {token}'
     }
-    response = requests.get(BILLING_SERVICE_URL +
-                            f'billing/{username}/subscriptions/', headers=headers)
+    response = requests.get(SERVICES['billingservice'] +
+                            f'/billing/{username}/subscriptions/', headers=headers)
 
     if response.status_code == 200:
         return True

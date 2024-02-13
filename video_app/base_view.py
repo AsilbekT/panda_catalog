@@ -10,19 +10,23 @@ from .models import Episode, FavoriteContent, UserSubscription, Movie, Series, C
 
 class BaseViewSet(viewsets.ModelViewSet):
     def validate_token(self, request):
-        auth_header = request.META.get('HTTP_AUTHORIZATION', '').split()
-        if len(auth_header) != 2 or auth_header[0].lower() != 'bearer':
-            return False
+        try:
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '').split()
+            if len(auth_header) != 2 or auth_header[0].lower() != 'bearer':
+                return False, None, None
 
-        token = auth_header[1]
-        headers = {'Authorization': f'Bearer {token}'}
-
-        response = requests.get(
-            SERVICES['authservice'] + '/auth/verify-token', headers=headers)
-
-        # For debugging purposes; remove or comment out in production
-        return response.status_code == 200, response.json()['data'], token
-
+            token = auth_header[1]
+            headers = {'Authorization': f'Bearer {token}'}
+            response = requests.get(
+                SERVICES['authservice'] + '/auth/verify-token', headers=headers)
+            if response.status_code == 200:
+                return True, response.json()['data'], token
+            else:
+                return False, None, None
+        except Exception as e:
+            # Log the exception if necessary
+            return False, None, None
+            
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
         serializer = self.get_serializer(queryset, many=True)
@@ -44,11 +48,16 @@ class BaseViewSet(viewsets.ModelViewSet):
 
         if isinstance(instance, (Movie, Series)):
             content_type = ContentType.objects.get_for_model(type(instance))
-            top_level_comments = Comment.objects.filter(
-                content_type=content_type, object_id=instance.id, parent__isnull=True)
+            all_comments = Comment.objects.filter(
+                content_type=content_type, object_id=instance.id)
+
+            comment_count = all_comments.count()
+
+            top_level_comments = all_comments.filter(parent__isnull=True)
             comment_serializer = CommentSerializer(
                 top_level_comments, many=True)
             serialized_data['comments'] = comment_serializer.data
+            serialized_data['comment_count'] = comment_count
 
         # Determine if the content is free
         if isinstance(instance, Episode):
@@ -179,7 +188,6 @@ class BaseViewSet(viewsets.ModelViewSet):
                 content_type=content_type_model,
                 object_id=content_object.pk
             )
-
             if favorite.exists():
                 favorite.delete()
                 return standardResponse(status='success', message='Removed from favorites', data={"content_id": content_object.pk})
@@ -196,10 +204,36 @@ class MobileOnlyMixin:
     def dispatch(self, request, *args, **kwargs):
         is_mobile = self.is_request_from_mobile(request)
         if not is_mobile and self.get_queryset().filter(is_mobile_only=True).exists():
-            return standardResponse(status='error', message='This content is only available on mobile devices.')
+            return standardResponse(status='error', message='This content is only available on mobile devices.', data={})
         return super().dispatch(request, *args, **kwargs)
 
     def is_request_from_mobile(self, request):
         # Simple check. Can be enhanced based on User-Agent or custom headers
+        user_agent = request.headers.get('User-Agent', '').lower()
+        return 'mobile' in user_agent
+
+
+
+class MobileOnlyEpisodes:
+    """
+    Mixin to be used with viewsets to filter out episodes from series 
+    that are marked as mobile only when the request is not from a mobile device.
+    """
+    def dispatch(self, request, *args, **kwargs):
+        # Call the parent dispatch method to start with the standard processing
+        response = super().dispatch(request, *args, **kwargs)
+
+        # Apply additional filtering logic only for non-mobile requests
+        if not self.is_request_from_mobile(request):
+            # Get IDs of series marked as 'mobile only'
+            mobile_only_series_ids = Series.objects.filter(is_mobile_only=True).values_list('id', flat=True)
+
+            # Modify the queryset of the viewset to exclude these series
+            self.queryset = self.queryset.exclude(series_id__in=mobile_only_series_ids)
+
+        return response
+
+    def is_request_from_mobile(self, request):
+        # Implement logic to determine if the request is from a mobile device
         user_agent = request.headers.get('User-Agent', '').lower()
         return 'mobile' in user_agent

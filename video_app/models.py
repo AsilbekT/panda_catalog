@@ -5,6 +5,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.utils.text import slugify
 from django.contrib.contenttypes.fields import GenericRelation
+from django.core.exceptions import ValidationError
 
 # Model for storing different genres
 
@@ -18,6 +19,8 @@ class SubscriptionPlan(models.Model):
     def __str__(self):
         return self.name
 
+    class Meta:
+        db_table = 'subscription_plan_table'  # Custom table name
 
 class FavoriteContent(models.Model):
     username = models.CharField(max_length=200)
@@ -79,7 +82,7 @@ class Catagory(models.Model):
 
 
 class Content(models.Model):
-    title = models.CharField(max_length=255)
+    title = models.CharField(max_length=255, unique=True)
     slug = models.SlugField(unique=True, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     available_under_plans = models.ManyToManyField(
@@ -87,7 +90,7 @@ class Content(models.Model):
     category = models.ForeignKey(
         Catagory, on_delete=models.CASCADE, related_name="%(class)s_catagory", null=True, blank=True)
     genre = models.ManyToManyField(
-        Genre, related_name="%(class)s_contents")
+        Genre, related_name="%(class)s_contents", blank=True)
     release_date = models.DateField(blank=True, null=True)
     duration_minute = models.IntegerField()
     director = models.ForeignKey(
@@ -95,9 +98,15 @@ class Content(models.Model):
     cast_list = models.TextField(blank=True, null=True)
     rating = models.FloatField(blank=True, null=True)
     is_mobile_only = models.BooleanField(default=False)
-
+    telegram_link = models.URLField(default='https://t.me/c/2047954894/4')
     thumbnail_image = models.ImageField(
         upload_to="thumbnail_image/",
+        blank=True,
+        null=True,
+        validators=[validate_file_size, validate_image_file]
+    )
+    widescreen_thumbnail_image = models.ImageField(
+        upload_to="widescreen_thumbnail_image/",
         blank=True,
         null=True,
         validators=[validate_file_size, validate_image_file]
@@ -110,7 +119,7 @@ class Content(models.Model):
     is_premiere = models.BooleanField(default=False)
     has_trailer = models.BooleanField(default=False)
     is_free = models.BooleanField(default=False)
-
+    telegram_private_channel = models.CharField(max_length=200, default="-1001802351887")
     class Meta:
         abstract = True
 
@@ -118,11 +127,14 @@ class Content(models.Model):
         return self.title
 
     def save(self, *args, **kwargs):
+        if self.__class__.objects.filter(title=self.title).exclude(pk=self.pk).exists():
+            raise ValidationError(f"A content item with the title '{self.title}' already exists.")
+        
         if not self.slug:
             self.slug = slugify(self.title)
+
         super(Content, self).save(*args, **kwargs)
-
-
+        
 class Movie(Content):
     production_cost = models.FloatField(blank=True, null=True)
     licensing_cost = models.FloatField(blank=True, null=True)
@@ -192,10 +204,10 @@ class Episode(models.Model):
         null=True,
         validators=[validate_file_size, validate_image_file]
     )
-    episode_content_url = models.URLField(unique=True)
+    episode_content_url = models.URLField(blank=True, null=True)
     is_ready = models.BooleanField(default=False)
     conversion_type = models.ForeignKey(
-        VideoConversionType, on_delete=models.SET_NULL, null=True, related_name='episodes')
+        VideoConversionType, on_delete=models.SET_NULL, null=True, blank=True, related_name='episodes')
 
     class Meta:
         db_table = 'episode_table'
@@ -257,6 +269,12 @@ class Banner(models.Model):
     def is_premiere(self):
         return getattr(self.content_object, 'is_premiere', None)
 
+    @property
+    def genres(self):
+        if hasattr(self.content_object, 'genre'):
+            return self.content_object.genre
+        return None
+
 
 class UserSubscription(models.Model):
     STATUS_CHOICES = [
@@ -312,3 +330,16 @@ class Comment(models.Model):
     @property
     def is_reply(self):
         return self.parent is not None
+
+
+
+
+
+class PandaDocs(models.Model):
+    title = models.CharField(max_length=200, blank=True, null=True)
+    document = models.FileField(upload_to='pandadocs/', blank=True, null=True)
+
+    def get_document_url(self):
+        if self.document:
+            return self.document.url
+        return None

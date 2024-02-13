@@ -8,12 +8,16 @@ from .views import (
     DirectorViewSet,
     MovieViewSet,
     SeriesViewSet,
-    SeasonViewSet,  # make sure to create this ViewSet
+    SeasonViewSet,
     EpisodeViewSet,
     CategoryViewSet,
     BannerViewSet,
     SubscriptionPlanView,
-    UserSubscriptionViewSet
+    UserSubscriptionViewSet,
+    VideoConversionTypeListView,
+    ContentTypeListView,
+    PandaDocsView,
+    MovieFeaturedViewSet
 )
 
 router = DefaultRouter()
@@ -21,7 +25,7 @@ router = DefaultRouter()
 router.register(r'genres', GenreViewSet, basename="genres")
 router.register(r'directors', DirectorViewSet, basename="directors")
 router.register(r'movies', MovieViewSet, basename="movies")
-router.register(r'series', SeriesViewSet, basename="series")
+router.register(r'series', SeriesViewSet, basename="series_home")
 router.register(r'banners', BannerViewSet, basename='banners')
 router.register(r'category', CategoryViewSet, basename='category')
 router.register(r'plans', SubscriptionPlanView, basename='plans')
@@ -37,7 +41,12 @@ seasons_router = routers.NestedDefaultRouter(
 seasons_router.register(r'episodes', EpisodeViewSet,
                         basename='seasons-episodes')
 router.register(r'subscriptions', UserSubscriptionViewSet)
-router.register(r'user-favorites', FavoriteContentViewSet)
+router.register(r'user-favorites', FavoriteContentViewSet, basename='user-favorites-home')
+router.register(r'video-conversion-types', VideoConversionTypeListView, basename='video-conversion-types')
+router.register(r'content-types', ContentTypeListView, basename='content-types')
+router.register(r'docs', PandaDocsView, basename='panda-docs')
+router.register(r'docs', PandaDocsView, basename='panda-docs')
+router.register(r'is_featured_movies', MovieFeaturedViewSet, basename='is_featured')
 
 urlpatterns = [
     path('', include(router.urls)),

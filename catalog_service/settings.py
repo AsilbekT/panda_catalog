@@ -17,11 +17,13 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SERVICES = {
-    "userservice": "https://userservice.inminternational.uz",
-    "catalogservice": "https://catalogservice.inminternational.uz",
-    "authservice": "https://authservice.inminternational.uz",
-    "billingservice": "https://billingservice.inminternational.uz",
-    "videoconversion": "http://127.0.0.1:8000"
+    "userservice": "https://gateway.pandatv.uz/userservice",
+    "authservice": "https://gateway.pandatv.uz",
+    "catalogservice": "https://gateway.pandatv.uz/catalogservice",
+    "playbackservice": "https://gateway.pandatv.uz/playbackservice",
+    "billingservice": "https://gateway.pandatv.uz/billingservice",
+    "analiticservice": "https://gateway.pandatv.uz/analitics",
+    "videoconversion": "https://gateway.pandatv.uz/videoconversion"
 }
 
 # Quick-start development settings - unsuitable for production
@@ -29,17 +31,55 @@ SERVICES = {
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-c$r8uxk(=f#g(^*ghlct$pp=q+h@67*dq@b49gykl4j66klqf1'
-
+SECRET_KEY_JWT = 'VpwI_yUDuQuhA1VEB0c0f9qki8JtLeFWh3lA5kKvyGnHxKrZ-M59cA'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["*"]
+# settings.py
 
-# CSRF_TRUSTED_ORIGINS = [
-#     'https://41f1-185-139-137-118.ngrok-free.app',
-# ]
-CORS_ALLOW_ALL_ORIGINS = True
+# This is risky; don't use it in production
+ALLOWED_HOSTS = ['gateway.pandatv.uz']
 
+# Trust these origins for CSRF
+CSRF_TRUSTED_ORIGINS = [
+    'https://gateway.pandatv.uz',
+    'https://panda-production.netlify.app',
+    'https://pandatv.uz'
+]
+
+SERVICES = {
+    "userservice": "https://gateway.pandatv.uz/userservice",
+    "authservice": "https://gateway.pandatv.uz",
+    "catalogservice": "https://gateway.pandatv.uz/catalogservice",
+    "playbackservice": "https://gateway.pandatv.uz/playbackservice",
+    "billingservice": "https://gateway.pandatv.uz/billingservice",
+    "analiticservice": "https://gateway.pandatv.uz/analitics",
+    "videoconversion": "https://gateway.pandatv.uz/videoconversion"
+}
+
+# Allow all origins for CORS
+
+# These settings will be ignored if CORS_ALLOW_ALL_ORIGINS is True
+CORS_ALLOWED_ORIGINS = [
+    "https://gateway.pandatv.uz",
+    "http://localhost:8080",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://panda-production.netlify.app",
+    'https://panda-dashboard-tau.vercel.app',
+    'https://pandatv.uz'
+]
+CORS_ORIGIN_WHITELIST = [
+    "https://gateway.pandatv.uz",
+    "http://localhost:8080",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://panda-production.netlify.app",
+    'https://panda-dashboard-tau.vercel.app',
+    'https://pandatv.uz'
+]
 
 # Application definition
 
@@ -61,23 +101,22 @@ INSTALLED_APPS = [
 
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
 }
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+CORS_ALLOW_ALL_ORIGINS = True
 
 
 ROOT_URLCONF = 'catalog_service.urls'
@@ -111,8 +150,8 @@ DATABASES = {
         # Use 'postgresql' as database engine
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'catalogs',  # Use the name you've given to your PostgreSQL database
-        'USER': 'asilbek',  # Use your PostgreSQL username here
-        'PASSWORD': 'Asilbek2001',  # Use your PostgreSQL password here
+        'USER': 'pandatv',  # Use your PostgreSQL username here
+        'PASSWORD': 'Pandatv_2023',  # Use your PostgreSQL password here
         'HOST': 'localhost',  # Set to the address where your PostgreSQL is hosted
         'PORT': '',  # Leave as an empty string to use the default port
     }
@@ -143,7 +182,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Tashkent'
 
 USE_I18N = True
 
@@ -153,8 +192,10 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = 'static/'
-MEDIA_URL = '/media/'
+STATIC_URL = '/catalogservice/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+MEDIA_URL = '/catalogservice/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

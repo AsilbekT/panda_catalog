@@ -1,9 +1,13 @@
 from rest_framework import serializers
 
 from video_app.utils import decode_token, ensure_https
-from .models import Catagory, Comment, FavoriteContent, Genre, Director, Movie, Season, Series, Episode, Banner, SubscriptionPlan, UserSubscription
+from .models import Catagory, Comment, FavoriteContent, Genre, Director, Movie, Season, Series, Episode, Banner, SubscriptionPlan, UserSubscription, VideoConversionType, PandaDocs
 from django.contrib.contenttypes.models import ContentType
 
+class VideoConversionTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VideoConversionType
+        fields = ['id', 'video_type']
 
 class GenreSerializer(serializers.ModelSerializer):
     class Meta:
@@ -20,18 +24,51 @@ class DirectorSerializer(serializers.ModelSerializer):
 class MovieSerializer(serializers.ModelSerializer):
     genre = GenreSerializer(many=True, read_only=True)
     is_favorited = serializers.SerializerMethodField()
+    widescreen_thumbnail_image = serializers.SerializerMethodField()
+
 
     class Meta:
         model = Movie
         fields = [
             'id', 'title', 'release_date', 'genre', 'is_free', 'rating',
-            'is_premiere', 'trailer_url', 'thumbnail_image', 'is_favorited'
+            'is_premiere', 'trailer_url', 'thumbnail_image', 'is_favorited', 'widescreen_thumbnail_image'
         ]
 
     def get_thumbnail_image(self, obj):
         request = self.context.get('request')
         thumbnail_image_url = obj.thumbnail_image.url
         return ensure_https(request.build_absolute_uri(thumbnail_image_url))
+    
+
+    def get_widescreen_thumbnail_image(self, obj):
+        request = self.context.get('request')
+        if obj.widescreen_thumbnail_image and hasattr(obj.widescreen_thumbnail_image, 'url'):
+            widescreen_thumbnail_image_url = obj.widescreen_thumbnail_image.url
+            return ensure_https(request.build_absolute_uri(widescreen_thumbnail_image_url))
+        return None
+
+    def get_is_favorited(self, obj):
+        # Get the user from the serializer context
+        username = self.get_username_from_token()
+        if username == 'anonymous':
+            return False
+
+        content_type = ContentType.objects.get_for_model(obj)
+        return FavoriteContent.objects.filter(
+            username=username, content_type=content_type, object_id=obj.id
+        ).exists()
+        
+    def get_username_from_token(self):
+        request = self.context.get('request')
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '').split()
+
+        if len(auth_header) == 2 and auth_header[0].lower() == 'bearer':
+            token = auth_header[1]
+            user_info = decode_token(token)
+            if user_info:  # Check if user_info is not None
+                return user_info.get('username')
+
+        return 'anonymous' 
 
     def get_is_favorited(self, obj):
         # Get the user from the serializer context
@@ -46,21 +83,23 @@ class MovieSerializer(serializers.ModelSerializer):
 
     def get_username_from_token(self):
         request = self.context.get('request')
-
         auth_header = request.META.get('HTTP_AUTHORIZATION', '').split()
+
         if len(auth_header) == 2 and auth_header[0].lower() == 'bearer':
             token = auth_header[1]
             user_info = decode_token(token)
-            # Ensure 'username' is a key in the token payload
-            return user_info.get('username')
-        return 'anonymous'
+            if user_info:  # Check if user_info is not None
+                return user_info.get('username')
 
+        return 'anonymous' 
 
 class MovieDetailSerializer(serializers.ModelSerializer):
     genre = GenreSerializer(many=True, read_only=True)
     director = DirectorSerializer(read_only=True)
     thumbnail_image = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
+    widescreen_thumbnail_image = serializers.SerializerMethodField()
+
 
     class Meta:
         model = Movie
@@ -69,13 +108,20 @@ class MovieDetailSerializer(serializers.ModelSerializer):
             'cast_list', 'rating', 'trailer_url', 'main_content_url', 'is_ready',
             'is_premiere', 'has_trailer', 'is_free', 'production_cost', 'licensing_cost',
             'is_featured', 'is_trending', 'is_movie', 'category', 'conversion_type',
-            'available_under_plans', 'genre', 'director', 'thumbnail_image', 'is_favorited'
+            'available_under_plans', 'genre', 'director', 'thumbnail_image', 'is_favorited', 'widescreen_thumbnail_image'
         ]
 
     def get_thumbnail_image(self, obj):
         request = self.context.get('request')
         thumbnail_image_url = obj.thumbnail_image.url
         return ensure_https(request.build_absolute_uri(thumbnail_image_url))
+
+    def get_widescreen_thumbnail_image(self, obj):
+        request = self.context.get('request')
+        if obj.widescreen_thumbnail_image and hasattr(obj.widescreen_thumbnail_image, 'url'):
+            widescreen_thumbnail_image_url = obj.widescreen_thumbnail_image.url
+            return ensure_https(request.build_absolute_uri(widescreen_thumbnail_image_url))
+        return None
 
     def get_is_favorited(self, obj):
         # Get the user from the serializer context
@@ -90,14 +136,15 @@ class MovieDetailSerializer(serializers.ModelSerializer):
 
     def get_username_from_token(self):
         request = self.context.get('request')
-
         auth_header = request.META.get('HTTP_AUTHORIZATION', '').split()
+
         if len(auth_header) == 2 and auth_header[0].lower() == 'bearer':
             token = auth_header[1]
             user_info = decode_token(token)
-            # Ensure 'username' is a key in the token payload
-            return user_info.get('username')
-        return 'anonymous'
+            if user_info:  # Check if user_info is not None
+                return user_info.get('username')
+
+        return 'anonymous' 
 
 
 class SeriesSerializer(serializers.ModelSerializer):
@@ -106,6 +153,7 @@ class SeriesSerializer(serializers.ModelSerializer):
     thumbnail_image = serializers.SerializerMethodField()
     seasons = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
+    widescreen_thumbnail_image = serializers.SerializerMethodField()
 
     class Meta:
         model = Series
@@ -114,17 +162,30 @@ class SeriesSerializer(serializers.ModelSerializer):
             'cast_list', 'rating', 'trailer_url', 'series_summary_url', 'number_of_seasons',
             'is_ready', 'is_premiere', 'has_trailer', 'is_free', 'is_featured', 'is_trending',
             'is_movie', 'category', 'conversion_type', 'available_under_plans', 'genre',
-            'director', 'thumbnail_image', 'seasons',  'main_content_url', 'is_favorited'
+            'director', 'thumbnail_image', 'seasons',  'main_content_url', 'is_favorited', 'widescreen_thumbnail_image'
         ]
 
+    def get_widescreen_thumbnail_image(self, obj):
+        request = self.context.get('request')
+        if obj.widescreen_thumbnail_image and hasattr(obj.widescreen_thumbnail_image, 'url'):
+            widescreen_thumbnail_image_url = obj.widescreen_thumbnail_image.url
+            return ensure_https(request.build_absolute_uri(widescreen_thumbnail_image_url))
+        return None
     def get_thumbnail_image(self, obj):
         request = self.context.get('request')
         thumbnail_image_url = obj.thumbnail_image.url
         return ensure_https(request.build_absolute_uri(thumbnail_image_url))
 
+
     def get_seasons(self, obj):
         seasons = Season.objects.filter(series=obj)
         return SeasonSerializer(seasons, many=True, context=self.context).data
+    
+    def get_is_favorited(self, obj):
+        # Get the user from the serializer context
+        username = self.get_username_from_token()
+        if username == 'anonymous':
+            return False
 
     def get_is_favorited(self, obj):
         # Get the user from the serializer context
@@ -139,22 +200,37 @@ class SeriesSerializer(serializers.ModelSerializer):
 
     def get_username_from_token(self):
         request = self.context.get('request')
-
         auth_header = request.META.get('HTTP_AUTHORIZATION', '').split()
+
         if len(auth_header) == 2 and auth_header[0].lower() == 'bearer':
             token = auth_header[1]
             user_info = decode_token(token)
-            # Ensure 'username' is a key in the token payload
-            return user_info.get('username')
-        return 'anonymous'
+            if user_info:  # Check if user_info is not None
+                return user_info.get('username')
+
+        return 'anonymous' 
 
 
+    def get_username_from_token(self):
+        request = self.context.get('request')
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '').split()
+
+        if len(auth_header) == 2 and auth_header[0].lower() == 'bearer':
+            token = auth_header[1]
+            user_info = decode_token(token)
+            if user_info:  # Check if user_info is not None
+                return user_info.get('username')
+
+        return 'anonymous' 
+        
 class SeriesDetailSerializer(serializers.ModelSerializer):
     genre = GenreSerializer(many=True, read_only=True)
     director = DirectorSerializer(read_only=True)
     thumbnail_image = serializers.SerializerMethodField()
     seasons = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
+    widescreen_thumbnail_image = serializers.SerializerMethodField()
+
 
     class Meta:
         model = Series
@@ -173,19 +249,27 @@ class SeriesDetailSerializer(serializers.ModelSerializer):
 
     def get_username_from_token(self):
         request = self.context.get('request')
-
         auth_header = request.META.get('HTTP_AUTHORIZATION', '').split()
+
         if len(auth_header) == 2 and auth_header[0].lower() == 'bearer':
             token = auth_header[1]
             user_info = decode_token(token)
-            # Ensure 'username' is a key in the token payload
-            return user_info.get('username')
-        return 'anonymous'
+            if user_info:  # Check if user_info is not None
+                return user_info.get('username')
+
+        return 'anonymous' 
 
     def get_thumbnail_image(self, obj):
         request = self.context.get('request')
         thumbnail_image_url = obj.thumbnail_image.url
         return ensure_https(request.build_absolute_uri(thumbnail_image_url))
+
+    def get_widescreen_thumbnail_image(self, obj):
+        request = self.context.get('request')
+        if obj.widescreen_thumbnail_image and hasattr(obj.widescreen_thumbnail_image, 'url'):
+            widescreen_thumbnail_image_url = obj.widescreen_thumbnail_image.url
+            return ensure_https(request.build_absolute_uri(widescreen_thumbnail_image_url))
+        return None
 
     def get_seasons(self, obj):
         seasons = Season.objects.filter(series=obj)
@@ -196,12 +280,16 @@ class SeriesListSerializer(serializers.ModelSerializer):
     genre = GenreSerializer(many=True, read_only=True)
     thumbnail_image = serializers.SerializerMethodField()
     is_premiere = serializers.BooleanField(read_only=True)
+    widescreen_thumbnail_image = serializers.SerializerMethodField()
+
 
     class Meta:
         model = Series
         fields = [
             'id', 'title', 'release_date', 'genre', 'is_free',
-            'is_premiere', 'series_summary_url', 'thumbnail_image', 'description'
+            'is_premiere', 'series_summary_url', 
+            'thumbnail_image', 'description', 'widescreen_thumbnail_image',
+            'rating'
         ]
 
     def get_thumbnail_image(self, obj):
@@ -209,6 +297,12 @@ class SeriesListSerializer(serializers.ModelSerializer):
         thumbnail_image_url = obj.thumbnail_image.url
         return ensure_https(request.build_absolute_uri(thumbnail_image_url))
 
+    def get_widescreen_thumbnail_image(self, obj):
+        request = self.context.get('request')
+        if obj.widescreen_thumbnail_image and hasattr(obj.widescreen_thumbnail_image, 'url'):
+            widescreen_thumbnail_image_url = obj.widescreen_thumbnail_image.url
+            return ensure_https(request.build_absolute_uri(widescreen_thumbnail_image_url))
+        return None
 
 class EpisodeSerializer(serializers.ModelSerializer):
     series_description = serializers.ReadOnlyField(source='series.description')
@@ -326,6 +420,7 @@ class HomeAPIBannerSerializer(serializers.ModelSerializer):
         model = Banner
         fields = ['trailer_url', 'thumbnail_image_url',
                   'content_title', 'release_year', 'rating', 'genre']
+                  
 
     def get_genre(self, obj):
         if obj.content_object:
@@ -341,17 +436,24 @@ class HomeMovieSerializer(serializers.ModelSerializer):
     title = serializers.CharField(read_only=True)
     is_premiere = serializers.BooleanField(read_only=True)
     is_favorited = serializers.SerializerMethodField()
+    widescreen_thumbnail_image = serializers.SerializerMethodField()
 
     class Meta:
         model = Movie
         fields = ['id', 'genre', 'director', 'rating',
-                  'thumbnail_image', 'year', 'title', 'is_premiere', 'description', 'trailer_url', 'is_free', 'is_favorited', 'release_date']
+                  'thumbnail_image', 'year', 'title', 'is_premiere', 'description', 'trailer_url', 'is_free', 'is_favorited', 'release_date', 'widescreen_thumbnail_image']
 
     def get_thumbnail_image(self, obj):
         request = self.context.get('request')
         thumbnail_image_url = obj.thumbnail_image.url
         return ensure_https(request.build_absolute_uri(thumbnail_image_url))
-
+        
+    def get_widescreen_thumbnail_image(self, obj):
+        request = self.context.get('request')
+        if obj.widescreen_thumbnail_image and hasattr(obj.widescreen_thumbnail_image, 'url'):
+            widescreen_thumbnail_image_url = obj.widescreen_thumbnail_image.url
+            return ensure_https(request.build_absolute_uri(widescreen_thumbnail_image_url))
+        return None
     def get_is_favorited(self, obj):
         # Get the user from the serializer context
         username = self.get_username_from_token()
@@ -365,15 +467,15 @@ class HomeMovieSerializer(serializers.ModelSerializer):
 
     def get_username_from_token(self):
         request = self.context.get('request')
-
         auth_header = request.META.get('HTTP_AUTHORIZATION', '').split()
+
         if len(auth_header) == 2 and auth_header[0].lower() == 'bearer':
             token = auth_header[1]
             user_info = decode_token(token)
-            # Ensure 'username' is a key in the token payload
-            return user_info.get('username')
-        return 'anonymous'
+            if user_info:  # Check if user_info is not None
+                return user_info.get('username')
 
+        return 'anonymous' 
 
 class HomeSeriesSerializer(serializers.ModelSerializer):
     genre = GenreSerializer(many=True, read_only=True)
@@ -382,17 +484,24 @@ class HomeSeriesSerializer(serializers.ModelSerializer):
     year = serializers.CharField(read_only=True)
     title = serializers.CharField(read_only=True)
     is_premiere = serializers.BooleanField(read_only=True)
+    widescreen_thumbnail_image = serializers.SerializerMethodField()
 
     class Meta:
         model = Movie
         fields = ['id', 'genre', 'director', 'rating',
-                  'thumbnail_image', 'year', 'title', 'is_premiere', 'release_date']
+                  'thumbnail_image', 'year', 'title', 'is_premiere', 'release_date', 'widescreen_thumbnail_image']
 
     def get_thumbnail_image(self, obj):
         request = self.context.get('request')
         thumbnail_image_url = obj.thumbnail_image.url
         return ensure_https(request.build_absolute_uri(thumbnail_image_url))
-
+        
+    def get_widescreen_thumbnail_image(self, obj):
+        request = self.context.get('request')
+        if obj.widescreen_thumbnail_image and hasattr(obj.widescreen_thumbnail_image, 'url'):
+            widescreen_thumbnail_image_url = obj.widescreen_thumbnail_image.url
+            return ensure_https(request.build_absolute_uri(widescreen_thumbnail_image_url))
+        return None
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -461,3 +570,14 @@ class CommentSerializer(serializers.ModelSerializer):
     def get_replies(self, obj):
         replies = obj.replies.filter(parent=obj)
         return CommentSerializer(replies, many=True).data
+
+
+class ContentTypeBannerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentType
+        fields = ['id', 'model']
+
+class PandaDocsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PandaDocs
+        fields = ['id', 'document', 'title']

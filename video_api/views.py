@@ -40,7 +40,7 @@ class VideoUploadView(View):
         is_trailer = request.POST.get('is_trailer', 'false').lower() == 'true'
         video_type = request.POST.get('video_type')
         model_class = get_model_class(video_type)
-
+        print(video_type)
         if model_class is None:
             return JsonResponse({'status': 'failed', 'message': 'Invalid video type.'})
 
@@ -50,6 +50,7 @@ class VideoUploadView(View):
                 video_type = content.conversion_type.video_type
                 if is_trailer:
                     video_type = f"{video_type}_TRAILER"
+                    print(video_type)
             else:
                 # Handle the case for Episode or other models without conversion_type
                 video_type = 'EPISODE' if isinstance(
